@@ -13,6 +13,8 @@
   "scripts": {
     "start": "npm run build && node -r dotenv/config dist/src/index.js",
     "dev": "node -r dotenv/config dist/src/index.js",
+    "telegram": "npm run build && node -r dotenv/config dist/src/telegram/index.js",
+    "telegram:dev": "tsx -r dotenv/config src/telegram/index.ts",
     "release": "./scripts/release.sh",
     "prebuild": "rimraf dist",
     "release:abort": "./scripts/abort_release.sh",
@@ -48,6 +50,7 @@
     "discord-hybrid-sharding": "^3.0.1",
     "discord.js": "^14.27.0",
     "google-auth-library": "^10.6.2",
+    "grammy": "^1.46.0",
     "i18next": "^21.6.13",
     "jsonwebtoken": "^9.0.0",
     "mixpanel": "^0.18.1",
