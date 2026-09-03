@@ -21,8 +21,23 @@ function compact(num = 0) {
   return `${num}`;
 }
 
-function truncate(html: string) {
-  return html.length > MAX_LENGTH ? `${html.slice(0, MAX_LENGTH)}…` : html;
+const TRUNCATED_NOTE = '<i>… (truncated)</i>';
+
+// Truncates at a line boundary so the result stays valid Telegram HTML.
+// Every line produced below has balanced tags, so dropping whole lines
+// never splits an entity or leaves a tag unclosed (unlike slicing chars).
+function truncateHtml(html: string) {
+  if (html.length <= MAX_LENGTH) return html;
+  const out: string[] = [];
+  let length = 0;
+  for (const line of html.split('\n')) {
+    const add = (out.length ? 1 : 0) + line.length;
+    if (length + add > MAX_LENGTH - TRUNCATED_NOTE.length) break;
+    out.push(line);
+    length += add;
+  }
+  out.push(TRUNCATED_NOTE);
+  return out.join('\n');
 }
 
 export function formatPlayer(data: APIPlayer, playerUrl: string) {
@@ -51,7 +66,7 @@ export function formatPlayer(data: APIPlayer, playerUrl: string) {
     '',
     link(playerUrl, 'Open in game ↗')
   ];
-  return truncate(lines.join('\n'));
+  return truncateHtml(lines.join('\n'));
 }
 
 export function formatClan(data: APIClan, clanUrl: string) {
@@ -76,7 +91,7 @@ export function formatClan(data: APIClan, clanUrl: string) {
     '',
     link(clanUrl, 'Open in game ↗')
   ].filter(Boolean);
-  return truncate(lines.join('\n'));
+  return truncateHtml(lines.join('\n'));
 }
 
 function warTimeLeft(war: APIClanWar) {
@@ -114,14 +129,14 @@ export function formatWar(
     '',
     recent.length ? `<b>Latest attacks</b>\n${recent.join('\n')}` : 'No attacks yet.'
   ];
-  return truncate(lines.join('\n'));
+  return truncateHtml(lines.join('\n'));
 }
 
 export function formatWarList(
   wars: (APIClanWar & { warTag?: string; round?: number; isFriendly?: boolean })[]
 ) {
   if (!wars.length) return 'No active war found for this clan.';
-  return wars.map((w) => formatWar(w)).join('\n\n———————\n\n');
+  return truncateHtml(wars.map((w) => formatWar(w)).join('\n\n———————\n\n'));
 }
 
 export function formatCwlGroup(group: {
@@ -153,5 +168,5 @@ export function formatCwlGroup(group: {
         `${i + 1}. ${escapeHtml(c.name)} <code>${escapeHtml(c.tag)}</code> — ⭐ ${c.stars} (${c.destruction.toFixed(1)}%)`
     );
 
-  return truncate([`<b>CWL ${escapeHtml(group.season)}</b>`, '', ...table].join('\n'));
+  return truncateHtml([`<b>CWL ${escapeHtml(group.season)}</b>`, '', ...table].join('\n'));
 }

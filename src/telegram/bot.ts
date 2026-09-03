@@ -7,7 +7,7 @@ import {
   setDefaultClan,
   setLinkedTag
 } from './db.js';
-import { formatClan, formatCwlGroup, formatPlayer, formatWarList } from './format.js';
+import { escapeHtml, formatClan, formatCwlGroup, formatPlayer, formatWarList } from './format.js';
 
 export type TelegramContext = Context;
 
@@ -23,6 +23,17 @@ function normalizeTag(raw: string, coc: TelegramCoC): string | null {
   const cleaned = raw.trim().toUpperCase().replace(/O/g, '0');
   if (!coc.isValidTag(cleaned)) return null;
   return coc.fixTag(cleaned);
+}
+
+async function isChatAdmin(ctx: TelegramContext) {
+  if (!ctx.from || !ctx.chat) return false;
+  if (ctx.chat.type === 'private') return true;
+  try {
+    const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+    return member.status === 'administrator' || member.status === 'creator';
+  } catch {
+    return false;
+  }
 }
 
 export function createBot(coc: TelegramCoC) {
@@ -61,7 +72,7 @@ export function createBot(coc: TelegramCoC) {
 
   bot.command('help', async (ctx) => {
     await ctx.reply(
-      '/player <tag> • /clan <tag> • /war [clan tag] • /cwl [clan tag] • /link <tag> • /me • /setclan <tag>',
+      '/player &lt;tag&gt; • /clan &lt;tag&gt; • /war [clan tag] • /cwl [clan tag] • /link &lt;tag&gt; • /me • /setclan &lt;tag&gt;',
       { parse_mode: 'HTML' }
     );
   });
@@ -76,7 +87,7 @@ export function createBot(coc: TelegramCoC) {
     const { body, res } = await coc.getPlayer(tag);
     if (!res.ok) return ctx.reply(`Player ${tag} not found.`);
     await setLinkedTag(ctx.from.id, body.tag);
-    await ctx.reply(`Linked to <b>${body.name}</b> <code>${body.tag}</code> ✅`, {
+    await ctx.reply(`Linked to <b>${escapeHtml(body.name)}</b> <code>${body.tag}</code> ✅`, {
       parse_mode: 'HTML'
     });
   });
@@ -139,6 +150,10 @@ export function createBot(coc: TelegramCoC) {
   });
 
   bot.command('setclan', async (ctx) => {
+    if (!ctx.from || !ctx.chat) return;
+    if (!(await isChatAdmin(ctx))) {
+      return ctx.reply('Only chat admins can change the default clan.');
+    }
     const raw = getArg(ctx.message?.text);
     if (!raw) return ctx.reply('Usage: /setclan #CLAN-TAG');
     const tag = normalizeTag(raw, coc);
@@ -146,15 +161,21 @@ export function createBot(coc: TelegramCoC) {
     const { body, res } = await coc.getClan(tag);
     if (!res.ok) return ctx.reply(`Clan ${tag} not found.`);
     await setDefaultClan(ctx.chat.id, body.tag);
-    await ctx.reply(`Default clan set to <b>${body.name}</b> <code>${body.tag}</code> ✅`, {
-      parse_mode: 'HTML'
-    });
+    await ctx.reply(
+      `Default clan set to <b>${escapeHtml(body.name)}</b> <code>${body.tag}</code> ✅`,
+      { parse_mode: 'HTML' }
+    );
   });
 
   bot.command('war', async (ctx) => {
     const tag = await resolveClanTag(ctx, getArg(ctx.message?.text));
     if (!tag) return ctx.reply('Usage: /war #CLAN-TAG (or /setclan #TAG in groups)');
-    const wars = await coc.getCurrentWars(tag).catch(() => []);
+    let wars;
+    try {
+      wars = await coc.getCurrentWars(tag);
+    } catch {
+      return ctx.reply('Could not fetch war data right now. Try again later.');
+    }
     if (!wars.length) return ctx.reply('No active war found for this clan.');
     await ctx.reply(formatWarList(wars), {
       parse_mode: 'HTML',
